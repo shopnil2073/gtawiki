@@ -1,0 +1,13 @@
+GTA Wiki: editorial redesign + /admin CMS
+
+1) npm i marked turndown turndown-plugin-gfm
+   npm i -D @types/turndown
+2) Delete these old files (the new design replaces them):
+   app/opengraph-image.tsx      (your og-default.jpg is used now)
+   app/favicon.ico              (your favicon.jpg is used now)
+   components/shell/Sidebar.tsx
+   components/shell/NavLinks.tsx
+3) Copy .env.example to .env.local and fill it in.
+4) Delete the .next folder, run: npm run dev
+5) Open http://localhost:3000/admin
+Full guide: see the chat message.

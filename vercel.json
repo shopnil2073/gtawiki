@@ -1,0 +1,3 @@
+{
+  "ignoreCommand": "case \"$VERCEL_GIT_COMMIT_MESSAGE\" in \"admin: draft\"*) exit 0;; *) exit 1;; esac"
+}
