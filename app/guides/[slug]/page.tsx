@@ -19,7 +19,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const url = `/guides/${post.slug}`;
   const title = post.seoTitle || post.title;
   return {
-    title: post.seoTitle ? { absolute: post.seoTitle } : post.title,
+    // absolute: what you type in the SEO title field is exactly what Google sees (no "| GTA Wiki" suffix)
+    title: { absolute: title },
     description: post.description,
     alternates: { canonical: url },
     authors: [{ name: post.author }],

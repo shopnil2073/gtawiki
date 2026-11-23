@@ -1,14 +1,17 @@
 import type { MetadataRoute } from "next";
 import { siteConfig, categories, legalLinks } from "@/lib/site";
-import { getAllPosts } from "@/lib/posts";
+import { getAllPosts, getCategoryCounts } from "@/lib/posts";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const posts = getAllPosts();
   const newest = posts[0]?.updated ?? "2026-11-21";
+  const counts = getCategoryCounts();
 
   return [
     { url: siteConfig.url, lastModified: newest, changeFrequency: "daily", priority: 1 },
-    ...categories.map((c) => ({
+    ...categories
+      .filter((c) => (counts[c.slug] ?? 0) >= 3) // thin category pages stay out of the sitemap
+      .map((c) => ({
       url: `${siteConfig.url}/category/${c.slug}`,
       lastModified: newest,
       changeFrequency: "daily" as const,

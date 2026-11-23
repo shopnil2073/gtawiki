@@ -155,9 +155,11 @@ export function getToc(content: string): TocItem[] {
     if (line.trim().startsWith("```")) inFence = !inFence;
     if (inFence) continue;
     const m = /^(#{2,3})\s+(.+?)\s*#*$/.exec(line);
-    if (!m) continue;
-    const text = stripMarkdown(m[2]);
-    items.push({ id: slugger.slug(text), text, level: m[1].length as 2 | 3 });
+    const h = /^\s*<h([23])[^>]*>([\s\S]*?)<\/h\1>\s*$/i.exec(line);
+    if (!m && !h) continue;
+    const level = (m ? m[1].length : Number(h![1])) as 2 | 3;
+    const text = stripMarkdown(m ? m[2] : h![2]);
+    items.push({ id: slugger.slug(text), text, level });
   }
   return items;
 }

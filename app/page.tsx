@@ -17,7 +17,7 @@ export default function HomePage() {
   const lead = posts[0];
   const stack = posts.slice(1, 4);
   const trending = posts.filter((p) => p.category === "q-and-a" || p.type === "qa");
-  const tickerPosts = (trending.length > 0 ? trending : posts).slice(0, 8);
+  const tickerPosts = (trending.length > 0 ? trending : []).slice(0, 3);
   const rest = posts.slice(4, 4 + 8);
 
   const indexItems = categories.map((c) => ({
@@ -28,32 +28,19 @@ export default function HomePage() {
 
   return (
     <div>
-      {/* Ticker */}
-      <div className="ticker overflow-hidden border-b border-line bg-panel">
-        <div className="mx-auto flex max-w-6xl items-stretch">
-          <span className="mono-label z-10 shrink-0 bg-neon-pink px-4 py-3 text-base">Trending Q&amp;A</span>
-          <div className="min-w-0 flex-1 overflow-hidden">
-            <div className="ticker-track">
-              {[0, 1].map((dup) => (
-                <ul key={dup} className="flex shrink-0 items-center" aria-hidden={dup === 1}>
-                  {tickerPosts.length === 0 ? (
-                    <li className="mono-label px-6 text-mute">New files incoming // check back soon</li>
-                  ) : (
-                    tickerPosts.map((p) => (
-                      <li key={p.slug} className="flex items-center">
-                        <Link href={`/guides/${p.slug}`} className="mono-label whitespace-nowrap px-6 py-3 text-paper hover:text-sunset">
-                          {p.title}
-                        </Link>
-                        <span className="text-line">/</span>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              ))}
-            </div>
+      {/* Trending strip (static: no animation, no layout shift) */}
+      {tickerPosts.length > 0 && (
+        <div className="border-b border-line bg-panel">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
+            <span className="mono-label text-neon-pink">Trending Q&amp;A</span>
+            {tickerPosts.slice(0, 3).map((p) => (
+              <Link key={p.slug} href={`/guides/${p.slug}`} className="text-sm text-paper hover:text-sunset">
+                {p.title}
+              </Link>
+            ))}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Masthead lead */}
       <section className="mx-auto max-w-6xl px-4 pb-14 pt-10 sm:px-6 lg:pt-14" aria-label="Top stories">
@@ -106,25 +93,6 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* Positioning strip */}
-      <section className="mx-auto max-w-6xl px-4 pt-10 sm:px-6">
-        <div className="grid border border-line md:grid-cols-3">
-          {[
-            ["01", "Checked in-game", "Gameplay claims are tested or traced to an official Rockstar source."],
-            ["02", "Leaks are labeled", "Rumors never pass as fact, and we never host stolen files."],
-            ["03", "Always current", "Every guide shows when it was last updated, and we revise after patches."],
-          ].map(([n, t, d]) => (
-            <div key={n} className="border-b border-line p-6 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0">
-              <p className="mono-label text-sunset">{n}</p>
-              <h3 className="mt-3 font-display text-xl font-semibold text-paper">{t}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-mute">{d}</p>
-            </div>
-          ))}
-        </div>
-        <p className="mt-4 text-sm text-mute">
-          Read the full <Link href="/editorial-policy" className="text-paper underline decoration-sunset underline-offset-4">editorial policy</Link>.
-        </p>
-      </section>
     </div>
   );
 }

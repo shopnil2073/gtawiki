@@ -92,7 +92,12 @@ export function extractHeadings(body: string): Heading[] {
     if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
     if (inFence) continue;
     const m = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
-    if (m) out.push({ level: m[1].length, text: m[2].replace(/[*_`]/g, "") });
+    if (m) {
+      out.push({ level: m[1].length, text: m[2].replace(/[*_`]/g, "") });
+      continue;
+    }
+    const h = /^\s*<h([1-6])[^>]*>([\s\S]*?)<\/h\1>\s*$/i.exec(line);
+    if (h) out.push({ level: Number(h[1]), text: h[2].replace(/<[^>]+>/g, "").trim() });
   }
   return out;
 }
@@ -216,17 +221,21 @@ export function analyze(input: SeoInput): SeoResult {
             : "Headings are in a logical order.",
   });
 
-  // 8. keyword density
+  // 8. keyword density (long-tail phrases of 4+ words get a realistic band: repeating a 7-word phrase
+  //    1-2% of the time would read as stuffing, so the exact phrase is held to 0.25-1.5%)
   const keywordCount = countPhrase(normText, kw);
   const density = words > 0 ? (keywordCount / words) * 100 : 0;
+  const longTail = kw.split(" ").filter(Boolean).length >= 4;
+  const lo = longTail ? 0.25 : 0.8;
+  const hi = longTail ? 1.5 : 2.0;
   add({
     id: "density",
-    label: "Keyword density is 0.8%-2.0%",
-    status: noKw ? "fail" : density >= 0.8 && density <= 2.0 ? "pass" : density > 2.0 ? "fail" : "warn",
+    label: `Keyword density is ${lo}%-${hi}%${longTail ? " (long-tail phrase)" : ""}`,
+    status: noKw ? "fail" : density >= lo && density <= hi ? "pass" : density > hi ? "fail" : "warn",
     hint: noKw
       ? needKw
       : `Used ${keywordCount}× in ${words} words = ${density.toFixed(2)}%. ${
-          density > 2.0 ? "That looks like keyword stuffing: use variations." : density < 0.8 ? "Use the keyword a bit more naturally." : "Healthy density."
+          density > hi ? "That looks like keyword stuffing: use variations." : density < lo ? "Use the exact phrase a little more naturally, or add close variations." : "Healthy density."
         }`,
   });
 

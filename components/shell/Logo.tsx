@@ -1,12 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
-import { siteConfig } from "@/lib/site";
 
 export default function Logo() {
   return (
     <Link href="/" aria-label="GTA Wiki home" className="flex items-center gap-2.5">
       <Image
-        src={siteConfig.assets.logo}
+        src="/favicon.jpg"
         alt="GTA Wiki logo"
         width={72}
         height={72}

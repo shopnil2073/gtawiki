@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { categories, getCategory } from "@/lib/site";
 import { getPostsByCategory } from "@/lib/posts";
+
+/** Categories with fewer posts than this are thin pages: kept out of Google and ad-free. */
+const MIN_POSTS_TO_INDEX = 3;
+const MIN_POSTS_FOR_ADS = 6;
 import Breadcrumbs from "@/components/seo/Breadcrumbs";
 import PostCard from "@/components/seo/PostCard";
 import AdSlot from "@/components/mdx/AdSlot";
@@ -23,6 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description: `${cat.description} Browse every GTA 6 ${cat.label.toLowerCase()} guide on GTA Wiki.`,
     alternates: { canonical: url },
     openGraph: { type: "website", url, title, description: cat.description },
+    robots: getPostsByCategory(cat.slug).length < MIN_POSTS_TO_INDEX ? { index: false, follow: true } : undefined,
   };
 }
 
@@ -61,7 +66,7 @@ export default async function CategoryPage({ params }: Props) {
       </header>
 
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-        <AdSlot variant="header" />
+        {posts.length >= MIN_POSTS_FOR_ADS && <AdSlot variant="header" />}
         {posts.length === 0 ? (
           <div className="hatch border border-line p-10 text-center">
             <p className="mono-label text-sunset">Empty drawer</p>
