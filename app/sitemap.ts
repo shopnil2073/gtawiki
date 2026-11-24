@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { siteConfig, categories, legalLinks } from "@/lib/site";
+import { siteConfig, categories, legalLinks, postPath } from "@/lib/site";
 import { getAllPosts, getCategoryCounts } from "@/lib/posts";
 
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -18,7 +18,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.8,
     })),
     ...posts.map((p) => ({
-      url: `${siteConfig.url}/guides/${p.slug}`,
+      url: `${siteConfig.url}${postPath(p.slug)}`,
       lastModified: p.updated,
       changeFrequency: "weekly" as const,
       priority: 0.7,

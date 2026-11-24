@@ -4,7 +4,7 @@ import { StoreError, deleteFile, exists, readFile, writeFile } from "@/lib/conte
 import { loadPost, postToFields } from "@/lib/admin-posts";
 import { serializePost, type PostFields } from "@/lib/frontmatter";
 import { categories } from "@/lib/site";
-import { isValidSlug } from "@/lib/text";
+import { slugProblem } from "@/lib/text";
 import type { MediaItem } from "@/lib/posts";
 
 type Ctx = { params: Promise<{ slug: string }> };
@@ -70,9 +70,8 @@ export async function PUT(req: Request, { params }: Ctx) {
     const { slug } = await params;
     const payload = (await req.json()) as SaveBody;
 
-    if (!isValidSlug(slug)) {
-      return NextResponse.json({ error: "Slug may only contain a-z, 0-9 and single dashes." }, { status: 400 });
-    }
+    const problem = slugProblem(slug);
+    if (problem) return NextResponse.json({ error: problem }, { status: 400 });
     const fields = clean(payload.fields);
     if (!fields.title) return NextResponse.json({ error: "Title is required." }, { status: 400 });
     if (!fields.description) return NextResponse.json({ error: "Meta description is required." }, { status: 400 });

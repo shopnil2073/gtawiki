@@ -3,7 +3,7 @@ import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import AppShell from "@/components/shell/AppShell";
 import AdSenseScript from "@/components/shell/AdSenseScript";
-import { siteConfig, getCategory } from "@/lib/site";
+import { siteConfig, getCategory, postPath } from "@/lib/site";
 import { searchIndex, type SearchItem } from "@/lib/search-index";
 import { getAllPosts } from "@/lib/posts";
 
@@ -78,7 +78,7 @@ const siteJsonLd = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const guideItems: SearchItem[] = getAllPosts().map((p) => ({
     title: p.title,
-    href: `/guides/${p.slug}`,
+    href: postPath(p.slug),
     section: getCategory(p.category)?.label ?? "Guide",
     keywords: `${p.keyword} ${p.secondaryKeywords.join(" ")} ${p.description}`,
   }));

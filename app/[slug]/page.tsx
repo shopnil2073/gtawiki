@@ -2,11 +2,15 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { extractFaq, extractSteps, getAllPosts, getPostBySlug } from "@/lib/posts";
 import { articleSchema, breadcrumbSchema, faqSchema, howToSchema } from "@/lib/schema";
-import { getCategory } from "@/lib/site";
+import { getCategory, postPath } from "@/lib/site";
 import JsonLd from "@/components/seo/JsonLd";
 import ArticleView from "@/components/seo/ArticleView";
 
 type Props = { params: Promise<{ slug: string }> };
+
+// Posts are served at the site root: https://gtawiki.xyz/<slug>
+// Static pages (/about, /contact, /category/..., /admin ...) always win over this dynamic route, and
+// lib/text.ts RESERVED_SLUGS stops a post from ever using one of those names.
 
 export function generateStaticParams() {
   return getAllPosts().map((p) => ({ slug: p.slug }));
@@ -16,7 +20,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const post = getPostBySlug(slug);
   if (!post) return {};
-  const url = `/guides/${post.slug}`;
+  const url = postPath(post.slug);
   const title = post.seoTitle || post.title;
   return {
     // absolute: what you type in the SEO title field is exactly what Google sees (no "| GTA Wiki" suffix)
@@ -56,7 +60,7 @@ export default async function GuidePage({ params }: Props) {
         data={breadcrumbSchema([
           { name: "Home", href: "/" },
           ...(cat ? [{ name: cat.label, href: `/category/${cat.slug}` }] : []),
-          { name: post.title, href: `/guides/${post.slug}` },
+          { name: post.title, href: postPath(post.slug) },
         ])}
       />
       {faq.length > 0 && <JsonLd data={faqSchema(faq)} />}

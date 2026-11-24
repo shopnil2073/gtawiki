@@ -338,3 +338,25 @@ a:hover > .link-rule,
 .pv-infobox {
   max-width: 20rem;
 }
+
+/* Visual editor + live preview: never let wide tables or images stretch the page sideways */
+.visual-surface,
+.pv-surface {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.visual-surface table,
+.pv-surface table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.visual-surface img,
+.pv-surface img {
+  max-width: 100%;
+  height: auto;
+}
+.wiki-prose mark {
+  color: inherit;
+}

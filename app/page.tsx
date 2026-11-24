@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { categories, siteConfig } from "@/lib/site";
+import { categories, postPath, siteConfig } from "@/lib/site";
 import { getAllPosts, getCategoryCounts } from "@/lib/posts";
 import PostCard from "@/components/seo/PostCard";
 import CategoryIndex from "@/components/seo/CategoryIndex";
@@ -34,7 +34,7 @@ export default function HomePage() {
           <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
             <span className="mono-label text-neon-pink">Trending Q&amp;A</span>
             {tickerPosts.slice(0, 3).map((p) => (
-              <Link key={p.slug} href={`/guides/${p.slug}`} className="text-sm text-paper hover:text-sunset">
+              <Link key={p.slug} href={postPath(p.slug)} className="text-sm text-paper hover:text-sunset">
                 {p.title}
               </Link>
             ))}
