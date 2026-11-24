@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Copy, ImagePlus, Star, Trash2, UploadCloud } from "lucide-react";
 import type { MediaItem } from "@/lib/posts";
 import { btnCls, inputCls } from "./ui";
+import { thumbUrl, uploadImage } from "./upload";
 
 type Upload = { id: string; name: string; status: "uploading" | "done" | "error"; error?: string };
 
@@ -18,16 +19,6 @@ type Props = {
   cloudinaryReady: boolean;
 };
 
-const MAX_BYTES = 10 * 1024 * 1024; // Cloudinary free plan image limit
-
-function humanize(name: string): string {
-  return name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function thumb(url: string): string {
-  return url.replace(/\/upload\/(?:[^/]*,[^/]*\/)?/, "/upload/c_fill,w_360,h_220,f_auto,q_auto/");
-}
-
 export default function MediaPanel({ slug, media, setMedia, featured, onSetFeatured, onInsertImage, onInsertStep, cloudinaryReady }: Props) {
   const input = useRef<HTMLInputElement>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
@@ -37,35 +28,7 @@ export default function MediaPanel({ slug, media, setMedia, featured, onSetFeatu
   async function uploadOne(file: File, id: string) {
     const patch = (p: Partial<Upload>) => setUploads((u) => u.map((x) => (x.id === id ? { ...x, ...p } : x)));
     try {
-      if (!file.type.startsWith("image/")) throw new Error("Not an image file.");
-      if (file.size > MAX_BYTES) throw new Error("Larger than 10 MB (Cloudinary free limit). Resize it first.");
-
-      const signRes = await fetch("/api/admin/cloudinary-sign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug: slug || "drafts" }),
-      });
-      const sign = (await signRes.json()) as { error?: string; cloudName: string; apiKey: string; timestamp: number; folder: string; signature: string };
-      if (!signRes.ok) throw new Error(sign.error ?? "Could not sign upload.");
-
-      const form = new FormData();
-      form.append("file", file);
-      form.append("api_key", sign.apiKey);
-      form.append("timestamp", String(sign.timestamp));
-      form.append("folder", sign.folder);
-      form.append("signature", sign.signature);
-
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${sign.cloudName}/image/upload`, { method: "POST", body: form });
-      const j = (await res.json()) as { secure_url?: string; public_id?: string; width?: number; height?: number; error?: { message: string } };
-      if (!res.ok || !j.secure_url) throw new Error(j.error?.message ?? "Cloudinary rejected the upload.");
-
-      const item: MediaItem = {
-        url: j.secure_url.replace("/upload/", "/upload/f_auto,q_auto/"),
-        alt: humanize(file.name),
-        publicId: j.public_id,
-        width: j.width,
-        height: j.height,
-      };
+      const item = await uploadImage(file, slug);
       setMedia((cur) => [...cur, item]);
       patch({ status: "done" });
     } catch (e) {
@@ -177,7 +140,7 @@ export default function MediaPanel({ slug, media, setMedia, featured, onSetFeatu
               <div key={m.url} className={`w-64 shrink-0 border ${isFeatured ? "border-sunset" : "border-line"} bg-base`}>
                 <div className="relative">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={thumb(m.url)} alt={m.alt} className="aspect-[360/220] w-full object-cover" />
+                  <img src={thumbUrl(m.url)} alt={m.alt} className="aspect-[360/220] w-full object-cover" />
                   {isFeatured && <span className="mono-label absolute left-0 top-0 bg-sunset px-2 py-1.5 text-base">Featured</span>}
                 </div>
                 <div className="space-y-2 p-3">

@@ -116,7 +116,7 @@ export default function PostManager({
                   <Link href={`/admin/editor/${p.slug}`} className="font-medium text-paper hover:text-sunset">
                     {p.title}
                   </Link>
-                  <p className="mono-label mt-1.5 !normal-case !tracking-normal text-mute">/guides/{p.slug}</p>
+                  <p className="mono-label mt-1.5 !normal-case !tracking-normal text-mute">/{p.slug}</p>
                   {p.error && <p className="mt-1 text-xs text-neon-pink">{p.error}</p>}
                 </td>
                 <td className="p-3 text-mute">{getCategory(p.category)?.label ?? "—"}</td>

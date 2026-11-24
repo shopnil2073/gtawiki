@@ -3,7 +3,7 @@ import { MDXRemote } from "next-mdx-remote/rsc";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
 import { getFileNumber, formatDate, getRelatedPosts, getToc, type Post } from "@/lib/posts";
-import { getCategory } from "@/lib/site";
+import { getCategory, postPath } from "@/lib/site";
 import { pad } from "@/lib/text";
 import { mdxComponents } from "@/components/mdx";
 import AdSlot from "@/components/mdx/AdSlot";
@@ -31,7 +31,7 @@ export default function ArticleView({ post, preview = false }: { post: Post; pre
             items={[
               { name: "Front page", href: "/" },
               ...(cat ? [{ name: cat.label, href: `/category/${cat.slug}` }] : []),
-              { name: post.title, href: `/guides/${post.slug}` },
+              { name: post.title, href: postPath(post.slug) },
             ]}
           />
 

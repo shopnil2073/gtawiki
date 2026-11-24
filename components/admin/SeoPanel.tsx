@@ -58,7 +58,7 @@ function Serp({ title, slug, description }: { title: string; slug: string; descr
       </div>
       <div className={`overflow-hidden bg-white p-3 text-left font-sans ${mobile ? "max-w-[22rem]" : ""}`}>
         <p className="truncate text-xs text-[#202124]">
-          gtawiki.xyz <span className="text-[#5f6368]">› guides › {slug || "your-slug"}</span>
+          gtawiki.xyz <span className="text-[#5f6368]">› {slug || "your-slug"}</span>
         </p>
         <p className="mt-1 text-[1.1rem] leading-snug text-[#1a0dab]">{t}</p>
         <p className="mt-1 text-sm leading-snug text-[#4d5156]">{d}</p>
@@ -71,12 +71,13 @@ type Props = {
   fields: PostFields;
   setField: <K extends keyof PostFields>(k: K, v: PostFields[K]) => void;
   slug: string;
+  slugIssue?: string | null;
   setSlug: (s: string) => void;
   regenSlug: () => void;
   result: SeoResult;
 };
 
-export default function SeoPanel({ fields, setField, slug, setSlug, regenSlug, result }: Props) {
+export default function SeoPanel({ fields, setField, slug, slugIssue, setSlug, regenSlug, result }: Props) {
   const [showExtra, setShowExtra] = useState(true);
   const [secondaryText, setSecondaryText] = useState(fields.secondaryKeywords.join(", "));
 
@@ -146,6 +147,7 @@ export default function SeoPanel({ fields, setField, slug, setSlug, regenSlug, r
             <button type="button" onClick={regenSlug} className="mono-label mb-1.5 text-mute hover:text-sunset">Regenerate</button>
           </div>
           <input id="slug" value={slug} onChange={(e) => setSlug(e.target.value)} className={`${inputCls} font-mono text-xs`} />
+          {slugIssue && <p className="mt-1.5 text-xs text-neon-pink">{slugIssue}</p>}
         </div>
 
         <div>

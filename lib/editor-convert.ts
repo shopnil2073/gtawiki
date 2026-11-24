@@ -7,9 +7,43 @@ import { blockLabel, parseBlock, splitMdx } from "./mdx-blocks";
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-function md(text: string): string {
-  return marked.parse(text, { async: false, gfm: true }) as string;
+/** <Color value="#hex">…</Color> / <Highlight value="#hex">…</Highlight> -> styled spans (Visual + preview). */
+function inlineToHtml(text: string): string {
+  return text
+    .replace(/<Color\s+value="(#[0-9a-fA-F]{3,8})"\s*>/g, '<span data-fmt="color" style="color:$1">')
+    .replace(/<Highlight\s+value="(#[0-9a-fA-F]{3,8})"\s*>/g, '<span data-fmt="highlight" style="background-color:$1">')
+    .replace(/<\/(?:Color|Highlight)>/g, "</span>");
 }
+
+function md(text: string): string {
+  return marked.parse(inlineToHtml(text), { async: false, gfm: true }) as string;
+}
+
+/** rgb()/rgba()/#hex (as browsers serialize them) -> #rrggbb or #rrggbbaa. Returns null if unknown. */
+export function toHex(value: string): string | null {
+  const v = value.trim().toLowerCase();
+  let m = /^#([0-9a-f]{3})$/.exec(v);
+  if (m) return "#" + m[1].split("").map((c) => c + c).join("");
+  m = /^#([0-9a-f]{4})$/.exec(v);
+  if (m) return "#" + m[1].split("").map((c) => c + c).join("");
+  if (/^#(?:[0-9a-f]{6}|[0-9a-f]{8})$/.test(v)) return v;
+  const rgb = /^rgba?\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})(?:[\s,/]+([\d.]+%?))?\s*\)$/.exec(v);
+  if (!rgb) return null;
+  const h = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+  let out = `#${h(+rgb[1])}${h(+rgb[2])}${h(+rgb[3])}`;
+  if (rgb[4] !== undefined) {
+    const a = rgb[4].endsWith("%") ? parseFloat(rgb[4]) / 100 : parseFloat(rgb[4]);
+    if (a < 1) out += h(a * 255);
+  }
+  return out;
+}
+
+function styleValue(style: string, prop: string): string | null {
+  const m = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`, "i").exec(style);
+  return m ? m[1].trim() : null;
+}
+
+let keepInlineFormats = true;
 
 /** In Visual mode each wiki component is a locked block that remembers its exact MDX. */
 function blockPlaceholder(raw: string, name: string): string {
@@ -54,11 +88,35 @@ function turndown(): TurndownService {
       return `\n\n${raw}\n\n`;
     },
   });
+  // Text color / highlight: browser spans (or <font>) -> <Color> / <Highlight> components
+  td.addRule("inlineColor", {
+    filter: (node) => {
+      if (node.nodeName !== "SPAN" && node.nodeName !== "FONT") return false;
+      const el = node as HTMLElement;
+      const style = el.getAttribute("style") ?? "";
+      return /(?:^|;)\s*(?:background-)?color\s*:/i.test(style) || (node.nodeName === "FONT" && el.hasAttribute("color"));
+    },
+    replacement: (content, node) => {
+      if (!keepInlineFormats || !content.trim()) return content;
+      const el = node as HTMLElement;
+      const style = el.getAttribute("style") ?? "";
+      const colorRaw = styleValue(style, "color") ?? (node.nodeName === "FONT" ? el.getAttribute("color") : null);
+      const bgRaw = styleValue(style, "background-color");
+      const color = colorRaw ? toHex(colorRaw) : null;
+      const bg = bgRaw ? toHex(bgRaw) : null;
+      let out = content;
+      if (bg) out = `<Highlight value="${bg}">${out}</Highlight>`;
+      if (color) out = `<Color value="${color}">${out}</Color>`;
+      return out;
+    },
+  });
   service = td;
   return td;
 }
 
-export function htmlToMdx(html: string): string {
+/** keepFormats=false drops colors/highlights (used when pasting foreign HTML). */
+export function htmlToMdx(html: string, keepFormats = true): string {
+  keepInlineFormats = keepFormats;
   return turndown()
     .turndown(html)
     .replace(/^[ \t]+$/gm, "")
@@ -74,7 +132,7 @@ export function visualRisks(body: string): string[] {
   for (const s of splitMdx(body)) {
     if (s.type !== "md") continue;
     const t = s.text.replace(/^(```|~~~)[\s\S]*?^\1.*$/gm, "");
-    if (/<[A-Z][A-Za-z0-9]*[\s/>]/.test(t)) risks.push("a wiki component placed inside a paragraph");
+    if (/<(?!Color\b|Highlight\b)[A-Z][A-Za-z0-9]*[\s/>]/.test(t)) risks.push("a wiki component placed inside a paragraph");
     if (/<(?!br\b)[a-z][a-z0-9]*[\s/>]/.test(t)) risks.push("raw HTML tags");
     if (/(^|[^\\])\{[^}]*\}/.test(t)) risks.push("a { } expression outside a component");
   }

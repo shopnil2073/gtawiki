@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Bold,
@@ -10,6 +10,7 @@ import {
   Heading2,
   Heading3,
   Heading4,
+  Highlighter,
   HelpCircle,
   Image as ImageIcon,
   Italic,
@@ -19,6 +20,7 @@ import {
   ListChecks,
   ListOrdered,
   Minus,
+  PanelRight,
   Pilcrow,
   Quote,
   Redo2,
@@ -27,15 +29,16 @@ import {
   Table2,
   Undo2,
   UserSquare2,
-  PanelRight,
 } from "lucide-react";
 import type { PostFields } from "@/lib/frontmatter";
 import type { MediaItem } from "@/lib/posts";
-import { isValidSlug, slugify } from "@/lib/text";
+import { slugProblem, slugify } from "@/lib/text";
 import { analyze } from "@/lib/seo-analysis";
 import { previewHtml, visualRisks } from "@/lib/editor-convert";
 import VisualEditor, { type VisualHandle } from "./VisualEditor";
 import ComponentModal, { type ModalKind } from "./ComponentModal";
+import ImageInsertModal from "./ImageInsertModal";
+import ColorPopover, { type Swatch } from "./ColorPopover";
 import MediaPanel from "./MediaPanel";
 import SeoPanel from "./SeoPanel";
 import { btnCls, btnPrimaryCls, inputCls } from "./ui";
@@ -52,8 +55,33 @@ type Props = {
 type Mode = "visual" | "mdx";
 type Notice = { type: "ok" | "error"; text: string } | null;
 type ModalState = { kind: ModalKind; initialRaw?: string; initialImage?: MediaItem; apply?: (mdx: string) => void } | null;
+type ColorKind = "text" | "bg";
 
 const snap = (fields: PostFields, slug: string, body: string) => JSON.stringify({ fields, slug, body });
+
+/** Theme-friendly text colors (dark UI). */
+const TEXT_SWATCHES: Swatch[] = [
+  { value: "#efe9df", label: "Paper (headline white)" },
+  { value: "#ffffff", label: "White" },
+  { value: "#ff7a45", label: "Sunset orange" },
+  { value: "#ff2e93", label: "Neon pink" },
+  { value: "#22d3ee", label: "Cyan" },
+  { value: "#4ade80", label: "Green" },
+  { value: "#facc15", label: "Yellow" },
+  { value: "#8e8e98", label: "Muted gray" },
+  { value: "#0b0b0d", label: "Ink (use on a highlight)" },
+];
+
+/** Subtle tinted highlights that stay readable on the dark background. */
+const BG_SWATCHES: Swatch[] = [
+  { value: "#ff7a4540", label: "Orange tint" },
+  { value: "#ff2e9340", label: "Pink tint" },
+  { value: "#22d3ee33", label: "Cyan tint" },
+  { value: "#4ade8033", label: "Green tint" },
+  { value: "#facc1540", label: "Yellow tint" },
+  { value: "#8b5cf640", label: "Purple tint" },
+  { value: "#ffffff1f", label: "Gray tint" },
+];
 
 export default function Editor({ isNew, initialSlug, initialFields, initialBody, storage, cloudinaryReady }: Props) {
   const [fields, setFields] = useState<PostFields>(initialFields);
@@ -63,27 +91,50 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
   const [mode, setMode] = useState<Mode>(visualRisks(initialBody).length > 0 ? "mdx" : "visual");
   const [split, setSplit] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
+  const [imageModal, setImageModal] = useState<{ initial?: MediaItem } | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [saving, setSaving] = useState(false);
   const [isNewPost, setIsNewPost] = useState(isNew);
   const [originalSlug, setOriginalSlug] = useState(initialSlug);
   const [savedSnap, setSavedSnap] = useState(snap(initialFields, initialSlug, initialBody));
+  const [colorOpen, setColorOpen] = useState<{ kind: ColorKind; anchor: HTMLElement } | null>(null);
+  const [textColor, setTextColor] = useState("#ff7a45");
+  const [bgColor, setBgColor] = useState("#facc1540");
+  const [barH, setBarH] = useState(64);
 
   const visualRef = useRef<VisualHandle>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
 
   const dirty = snap(fields, slug, body) !== savedSnap;
+  const slugIssue = slug ? slugProblem(slug) : null;
+
+  // The sticky formatting toolbar sits exactly under the sticky action bar, whatever height that bar has
+  // (it wraps to two rows on narrow screens and grows when a notice is shown).
+  useLayoutEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const measure = () => setBarH(Math.round(el.getBoundingClientRect().height));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   function setField<K extends keyof PostFields>(k: K, v: PostFields[K]) {
     setFields((f) => ({ ...f, [k]: v }));
+    // Short, keyword-based slug (like the focus keyword) unless you edited the slug yourself.
+    if (k === "keyword" && !slugTouched && typeof v === "string" && v.trim()) setSlug(slugify(v));
   }
 
   function setTitle(t: string) {
-    setField("title", t);
-    if (!slugTouched) setSlug(slugify(t));
+    setFields((f) => ({ ...f, title: t }));
+    if (!slugTouched) setSlug(slugify(fields.keyword || t));
   }
 
   const setMedia = (fn: (cur: MediaItem[]) => MediaItem[]) => setFields((f) => ({ ...f, media: fn(f.media) }));
+  const upsertMedia = (m: MediaItem) =>
+    setMedia((cur) => (cur.some((x) => x.url === m.url) ? cur.map((x) => (x.url === m.url ? { ...x, ...m } : x)) : [...cur, m]));
 
   const result = useMemo(
     () =>
@@ -106,17 +157,13 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
   const deferredBody = useDeferredValue(body);
   const preview = useMemo(() => (split ? previewHtml(deferredBody) : ""), [split, deferredBody]);
 
-  // warn before leaving with unsaved changes
   useEffect(() => {
     if (!dirty) return;
-    const h = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-    };
+    const h = (e: BeforeUnloadEvent) => e.preventDefault();
     window.addEventListener("beforeunload", h);
     return () => window.removeEventListener("beforeunload", h);
   }, [dirty]);
 
-  // Ctrl/Cmd+S
   const saveRef = useRef<() => void>(() => {});
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -141,6 +188,7 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
 
   function switchMode(next: Mode) {
     if (next === mode) return;
+    setColorOpen(null);
     if (mode === "visual") {
       setBody(currentBody());
       setMode(next);
@@ -184,6 +232,36 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
     setTextarea(next, caret, caret);
   }
 
+  /** MDX mode: wrap / unwrap the selection in <Color value="…"> or <Highlight value="…">. */
+  function mdxInline(tag: "Color" | "Highlight", value: string | null) {
+    const ta = taRef.current;
+    if (!ta) return;
+    const s = ta.selectionStart;
+    const e = ta.selectionEnd;
+    const sel = body.slice(s, e);
+    const tagRe = new RegExp(`<${tag}\\s+value="[^"]*"\\s*>|</${tag}>`, "g");
+
+    if (value === null) {
+      const before = body.slice(0, s);
+      const after = body.slice(e);
+      const close = `</${tag}>`;
+      const open = new RegExp(`<${tag}\\s+value="[^"]*"\\s*>$`).exec(before);
+      if (open && after.startsWith(close)) {
+        // caret / selection is directly inside one wrapper: remove it
+        const start = s - open[0].length;
+        setTextarea(before.slice(0, start) + sel + after.slice(close.length), start, start + sel.length);
+        return;
+      }
+      const cleaned = sel.replace(tagRe, "");
+      setTextarea(body.slice(0, s) + cleaned + body.slice(e), s, s + cleaned.length);
+      return;
+    }
+
+    const inner = sel.replace(tagRe, "") || "text";
+    const openTag = `<${tag} value="${value}">`;
+    setTextarea(body.slice(0, s) + openTag + inner + `</${tag}>` + body.slice(e), s + openTag.length, s + openTag.length + inner.length);
+  }
+
   function mdxFormat(a: string) {
     const ta = taRef.current;
     if (!ta) return;
@@ -224,7 +302,7 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
       case "quote":
         return lines((l) => `> ${strip(l)}`);
       case "link": {
-        const url = window.prompt("Link URL (use /guides/your-slug for internal links)", "/guides/");
+        const url = window.prompt("Link URL (internal links look like /another-post-slug)", "/");
         if (url) wrap("[", `](${url})`, "link text");
         return;
       }
@@ -267,10 +345,24 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
       case "redo":
         return v.exec("redo");
       case "link": {
-        const url = window.prompt("Link URL (use /guides/your-slug for internal links)", "/guides/");
+        const url = window.prompt("Link URL (internal links look like /another-post-slug)", "/");
         if (url) v.exec("createLink", url);
       }
     }
+  }
+
+  function applyColor(kind: ColorKind, value: string) {
+    if (kind === "text") setTextColor(value);
+    else setBgColor(value);
+    if (mode === "visual") visualRef.current?.exec(kind === "text" ? "foreColor" : "hiliteColor", value);
+    else mdxInline(kind === "text" ? "Color" : "Highlight", value);
+    setColorOpen(null);
+  }
+
+  function resetColor(kind: ColorKind) {
+    if (mode === "visual") visualRef.current?.exec(kind === "text" ? "clearColor" : "clearHighlight");
+    else mdxInline(kind === "text" ? "Color" : "Highlight", null);
+    setColorOpen(null);
   }
 
   const nextStep = (body.match(/<TutorialStep\b/g) ?? []).length + 1;
@@ -280,7 +372,8 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
   async function save(draft: boolean) {
     setNotice(null);
     if (!fields.title.trim()) return setNotice({ type: "error", text: "Add a post title first." });
-    if (!isValidSlug(slug)) return setNotice({ type: "error", text: "Slug may only contain a-z, 0-9 and single dashes." });
+    const problem = slugProblem(slug);
+    if (problem) return setNotice({ type: "error", text: problem });
     if (!fields.description.trim()) return setNotice({ type: "error", text: "Add a meta description first." });
     if (!draft && result.score < 50 && !window.confirm(`SEO score is only ${result.score}/100. Publish anyway?`)) return;
 
@@ -331,28 +424,22 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
 
   // ------------------------------------------------------------ UI
 
+  const toolBtn = "grid h-9 w-9 shrink-0 place-items-center border border-line text-paper hover:border-sunset hover:text-sunset";
+
   const fmtBtn = (a: string, label: string, icon: React.ReactNode, hideInMdx = false) =>
     hideInMdx && mode === "mdx" ? null : (
-      <button
-        key={a}
-        type="button"
-        title={label}
-        aria-label={label}
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => format(a)}
-        className="grid h-9 w-9 place-items-center border border-line text-paper hover:border-sunset hover:text-sunset"
-      >
+      <button key={a} type="button" title={label} aria-label={label} onMouseDown={(e) => e.preventDefault()} onClick={() => format(a)} className={toolBtn}>
         {icon}
       </button>
     );
 
-  const compBtn = (kind: ModalKind, label: string, icon: React.ReactNode) => (
+  const compBtn = (label: string, icon: React.ReactNode, onClick: () => void) => (
     <button
-      key={kind}
+      key={label}
       type="button"
       onMouseDown={(e) => e.preventDefault()}
-      onClick={() => setModal({ kind })}
-      className="mono-label inline-flex h-9 items-center gap-1.5 border border-sunset/50 bg-sunset/5 px-2.5 text-sunset hover:bg-sunset hover:text-base"
+      onClick={onClick}
+      className="mono-label inline-flex h-9 shrink-0 items-center gap-1.5 border border-sunset/50 bg-sunset/5 px-2.5 text-sunset hover:bg-sunset hover:text-base"
     >
       {icon}
       {label}
@@ -362,10 +449,10 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
   const scoreTone = result.score >= 80 ? "border-neon-cyan text-neon-cyan" : result.score >= 50 ? "border-sunset text-sunset" : "border-neon-pink text-neon-pink";
 
   return (
-    <div>
-      {/* top action bar */}
-      <div className="sticky top-0 z-30 border-b border-line bg-base/95">
-        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-3 px-4 py-3">
+    <div style={{ ["--editor-bar-h" as string]: `${barH}px` }}>
+      {/* sticky action bar */}
+      <div ref={barRef} className="sticky top-0 z-30 border-b border-line bg-base">
+        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
           <Link href="/admin" className="mono-label inline-flex items-center gap-1.5 text-mute hover:text-paper">
             <ArrowLeft className="h-3.5 w-3.5" /> Posts
           </Link>
@@ -412,7 +499,7 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
         )}
       </div>
 
-      <div className="mx-auto grid max-w-[1500px] gap-6 px-4 py-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="mx-auto grid max-w-[1500px] gap-6 px-4 pb-6 pt-6 xl:grid-cols-[minmax(0,1fr)_400px]">
         <main className="min-w-0 space-y-5">
           <div>
             <input
@@ -423,7 +510,7 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
               className="w-full border-0 border-b border-line bg-transparent pb-3 font-display text-3xl font-bold text-paper placeholder:text-mute focus:border-sunset focus:outline-none sm:text-4xl"
             />
             <p className="mono-label mt-3 !tracking-normal text-mute">
-              gtawiki.xyz/guides/
+              gtawiki.xyz/
               <input
                 value={slug}
                 onChange={(e) => {
@@ -431,13 +518,17 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
                   setSlug(e.target.value);
                 }}
                 aria-label="URL slug"
-                className="ml-0.5 w-[min(28rem,60%)] border-b border-line bg-transparent text-paper focus:border-sunset focus:outline-none"
+                className="ml-0.5 w-[min(28rem,70%)] border-b border-line bg-transparent text-paper focus:border-sunset focus:outline-none"
               />
             </p>
+            {slugIssue && <p className="mt-2 text-sm text-neon-pink">{slugIssue}</p>}
           </div>
 
-          {/* mode + toolbar */}
-          <div className="space-y-2">
+          {/* sticky: mode tabs + formatting toolbar */}
+          <div
+            className="sticky z-20 -mx-4 border-b border-line bg-base px-4 pb-2 pt-2 sm:mx-0 sm:px-0"
+            style={{ top: "var(--editor-bar-h)" }}
+          >
             <div className="flex flex-wrap items-center gap-3">
               <div role="tablist" aria-label="Editor mode" className="flex border border-line">
                 <button
@@ -459,18 +550,54 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
                   <Code2 className="h-3.5 w-3.5" /> MDX / HTML
                 </button>
               </div>
-              <button type="button" onClick={() => setSplit((v) => !v)} aria-pressed={split} className={`${btnCls} ${split ? "!border-sunset !text-sunset" : ""}`}>
+              <button type="button" onClick={() => setSplit((v) => !v)} aria-pressed={split} className={`${btnCls} !py-2.5 ${split ? "!border-sunset !text-sunset" : ""}`}>
                 <PanelRight className="h-4 w-4" /> Live preview
               </button>
             </div>
 
-            <div className="flex flex-wrap items-center gap-1.5 border border-line bg-panel p-2">
+            <div className="no-scrollbar mt-2 flex flex-nowrap items-center gap-1.5 overflow-x-auto border border-line bg-panel p-2 md:flex-wrap md:overflow-visible">
               {fmtBtn("bold", "Bold", <Bold className="h-4 w-4" />)}
               {fmtBtn("italic", "Italic", <Italic className="h-4 w-4" />)}
               {fmtBtn("h2", "Heading 2", <Heading2 className="h-4 w-4" />)}
               {fmtBtn("h3", "Heading 3", <Heading3 className="h-4 w-4" />)}
               {fmtBtn("h4", "Heading 4", <Heading4 className="h-4 w-4" />)}
               {fmtBtn("p", "Paragraph", <Pilcrow className="h-4 w-4" />)}
+
+              <button
+                type="button"
+                data-color-trigger
+                title="Text color"
+                aria-label="Text color"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  const anchor = e.currentTarget;
+                  setColorOpen((c) => (c?.kind === "text" ? null : { kind: "text", anchor }));
+                }}
+                className={`${toolBtn} ${colorOpen?.kind === "text" ? "!border-sunset" : ""}`}
+              >
+                <span className="flex flex-col items-center leading-none">
+                  <span className="font-display text-[15px] font-bold">A</span>
+                  <span className="mt-0.5 h-[3px] w-4" style={{ backgroundColor: textColor }} />
+                </span>
+              </button>
+              <button
+                type="button"
+                data-color-trigger
+                title="Highlight (text background)"
+                aria-label="Highlight color"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  const anchor = e.currentTarget;
+                  setColorOpen((c) => (c?.kind === "bg" ? null : { kind: "bg", anchor }));
+                }}
+                className={`${toolBtn} ${colorOpen?.kind === "bg" ? "!border-sunset" : ""}`}
+              >
+                <span className="flex flex-col items-center leading-none">
+                  <Highlighter className="h-4 w-4" />
+                  <span className="mt-0.5 h-[3px] w-4" style={{ backgroundColor: bgColor }} />
+                </span>
+              </button>
+
               {fmtBtn("ul", "Bullet list", <List className="h-4 w-4" />)}
               {fmtBtn("ol", "Numbered list", <ListOrdered className="h-4 w-4" />)}
               {fmtBtn("quote", "Blockquote", <Quote className="h-4 w-4" />)}
@@ -479,18 +606,18 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
               {fmtBtn("hr", "Divider", <Minus className="h-4 w-4" />)}
               {fmtBtn("undo", "Undo", <Undo2 className="h-4 w-4" />, true)}
               {fmtBtn("redo", "Redo", <Redo2 className="h-4 w-4" />, true)}
-              <span className="mx-1 hidden h-6 w-px bg-line sm:block" />
-              {compBtn("tutorial", "Step", <ListChecks className="h-3.5 w-3.5" />)}
-              {compBtn("qa", "Q&A", <HelpCircle className="h-3.5 w-3.5" />)}
-              {compBtn("cheat", "Cheat", <KeyRound className="h-3.5 w-3.5" />)}
-              {compBtn("infobox", "Infobox", <UserSquare2 className="h-3.5 w-3.5" />)}
-              {compBtn("figure", "Image", <ImageIcon className="h-3.5 w-3.5" />)}
+              <span className="mx-1 hidden h-6 w-px shrink-0 bg-line sm:block" />
+              {compBtn("Step", <ListChecks className="h-3.5 w-3.5" />, () => setModal({ kind: "tutorial" }))}
+              {compBtn("Q&A", <HelpCircle className="h-3.5 w-3.5" />, () => setModal({ kind: "qa" }))}
+              {compBtn("Cheat", <KeyRound className="h-3.5 w-3.5" />, () => setModal({ kind: "cheat" }))}
+              {compBtn("Infobox", <UserSquare2 className="h-3.5 w-3.5" />, () => setModal({ kind: "infobox" }))}
+              {compBtn("Image", <ImageIcon className="h-3.5 w-3.5" />, () => setImageModal({}))}
             </div>
           </div>
 
           {/* editor + preview */}
           <div className={split ? "grid gap-4 2xl:grid-cols-2" : ""}>
-            <div>
+            <div className="min-w-0">
               {mode === "visual" ? (
                 <VisualEditor
                   ref={visualRef}
@@ -519,12 +646,18 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
                 />
               )}
               <p className="mono-label mt-2 !tracking-normal text-mute">
-                {result.words.toLocaleString("en-US")} words · {mode === "visual" ? "Visual mode: wiki blocks appear as orange boxes (Edit / Remove)." : "MDX mode: write Markdown, HTML and wiki components directly."}
+                {result.words.toLocaleString("en-US")} words ·{" "}
+                {mode === "visual"
+                  ? "Visual mode: wiki blocks appear as orange boxes (Edit / Remove)."
+                  : "MDX mode: write Markdown, HTML and wiki components directly. Color and highlight are saved as <Color> and <Highlight> tags."}
               </p>
             </div>
             {split && (
-              <div>
-                <div className="wiki-prose max-h-[70vh] min-h-[460px] overflow-y-auto border border-line bg-panel p-5" dangerouslySetInnerHTML={{ __html: preview || "<p>Nothing to preview yet.</p>" }} />
+              <div className="min-w-0">
+                <div
+                  className="wiki-prose pv-surface max-h-[70vh] min-h-[460px] overflow-y-auto border border-line bg-panel p-5"
+                  dangerouslySetInnerHTML={{ __html: preview || "<p>Nothing to preview yet.</p>" }}
+                />
                 <p className="mono-label mt-2 !tracking-normal text-mute">Approximate preview. Use Preview (top right) for the exact saved page.</p>
               </div>
             )}
@@ -537,7 +670,7 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
             featured={fields.image}
             cloudinaryReady={cloudinaryReady}
             onSetFeatured={(m) => setFields((f) => ({ ...f, image: m.url, imageAlt: m.alt }))}
-            onInsertImage={(m) => setModal({ kind: "figure", initialImage: m })}
+            onInsertImage={(m) => setImageModal({ initial: m })}
             onInsertStep={(m) => setModal({ kind: "tutorial", initialImage: m })}
           />
 
@@ -557,23 +690,54 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
           </div>
         </main>
 
-        <aside className="min-w-0 xl:sticky xl:top-24 xl:max-h-[calc(100dvh-7rem)] xl:self-start xl:overflow-y-auto xl:pr-1">
+        <aside className="min-w-0 xl:sticky xl:top-[calc(var(--editor-bar-h)+1rem)] xl:max-h-[calc(100dvh-var(--editor-bar-h)-2rem)] xl:self-start xl:overflow-y-auto xl:pr-1">
           <SeoPanel
             fields={fields}
             setField={setField}
             slug={slug}
+            slugIssue={slugIssue}
             setSlug={(s) => {
               setSlugTouched(true);
               setSlug(s);
             }}
             regenSlug={() => {
-              setSlug(slugify(fields.title || fields.keyword));
+              setSlug(slugify(fields.keyword || fields.title));
               setSlugTouched(false);
             }}
             result={result}
           />
         </aside>
       </div>
+
+      {colorOpen && (
+        <ColorPopover
+          anchor={colorOpen.anchor}
+          title={colorOpen.kind === "text" ? "Text color" : "Highlight"}
+          swatches={colorOpen.kind === "text" ? TEXT_SWATCHES : BG_SWATCHES}
+          withAlpha={colorOpen.kind === "bg"}
+          resetLabel={colorOpen.kind === "text" ? "Reset to default color" : "Clear highlight"}
+          onPick={(v) => applyColor(colorOpen.kind, v)}
+          onReset={() => resetColor(colorOpen.kind)}
+          onClose={() => setColorOpen(null)}
+        />
+      )}
+
+      {imageModal && (
+        <ImageInsertModal
+          media={fields.media}
+          keyword={fields.keyword}
+          slug={slug}
+          cloudinaryReady={cloudinaryReady}
+          initial={imageModal.initial}
+          onMediaChange={upsertMedia}
+          onClose={() => setImageModal(null)}
+          onInsert={(mdx, { item, featured }) => {
+            insertMdx(mdx);
+            if (featured) setFields((f) => ({ ...f, image: item.url, imageAlt: item.alt }));
+            setImageModal(null);
+          }}
+        />
+      )}
 
       {modal && (
         <ComponentModal

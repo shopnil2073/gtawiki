@@ -69,3 +69,6 @@ export const legalLinks = [
 export function getCategory(slug: string) {
   return categories.find((c) => c.slug === slug);
 }
+
+/** Public path of a post. Posts live at the site root: https://gtawiki.xyz/<slug> */
+export const postPath = (slug: string) => `/${slug}`;

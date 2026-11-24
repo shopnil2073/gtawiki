@@ -71,6 +71,9 @@ function scanTagEnd(src: string, start: number): { end: number; selfClosing: boo
   return null;
 }
 
+/** Inline wiki components: they live inside paragraphs, so they are never treated as standalone blocks. */
+export const INLINE_COMPONENTS = new Set(["Color", "Highlight"]);
+
 /** Splits MDX into markdown text and wiki component blocks (only blocks that start at a line start). */
 export function splitMdx(src: string): Segment[] {
   const out: Segment[] = [];
@@ -82,7 +85,7 @@ export function splitMdx(src: string): Segment[] {
   while (pos < src.length) {
     re.lastIndex = pos;
     let m: RegExpExecArray | null = re.exec(src);
-    while (m && inFence(m.index)) m = re.exec(src);
+    while (m && (inFence(m.index) || INLINE_COMPONENTS.has(m[1]))) m = re.exec(src);
     if (!m) break;
 
     const name = m[1];

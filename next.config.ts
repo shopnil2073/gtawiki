@@ -33,6 +33,9 @@ const nextConfig: NextConfig = {
         destination: "https://gtawiki.xyz/:path*",
         permanent: true,
       },
+      // Old URL structure -> new flat structure. 301 = permanent, passes ranking signals.
+      { source: "/guides/:slug", destination: "/:slug", statusCode: 301 },
+      { source: "/guides", destination: "/", statusCode: 301 },
     ];
   },
 

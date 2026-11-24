@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ArrowUpRight } from "lucide-react";
-import { categories } from "@/lib/site";
+import { categories, postPath } from "@/lib/site";
 import { pad } from "@/lib/text";
 
 type Item = { slug: string; count: number; latest: { title: string; slug: string }[] };
@@ -56,7 +56,7 @@ export default function CategoryIndex({ items }: { items: Item[] }) {
                 <ul className="mt-3 space-y-2">
                   {current.latest.map((p) => (
                     <li key={p.slug}>
-                      <Link href={`/guides/${p.slug}`} className="text-sm text-paper hover:text-sunset">
+                      <Link href={postPath(p.slug)} className="text-sm text-paper hover:text-sunset">
                         → {p.title}
                       </Link>
                     </li>

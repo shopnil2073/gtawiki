@@ -54,6 +54,27 @@ const VisualEditor = forwardRef<VisualHandle, Props>(function VisualEditor({ ini
     }, 250);
   }
 
+  /** Removes one inline style (color or background-color) from every styled span touched by the selection. */
+  function clearInline(prop: "color" | "background-color") {
+    const root = el.current;
+    const sel = window.getSelection();
+    if (!root || !sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    root.querySelectorAll<HTMLElement>("span[style], font").forEach((node) => {
+      if (!range.intersectsNode(node)) return;
+      if (node.tagName === "FONT" && prop === "color") node.removeAttribute("color");
+      node.style.removeProperty(prop);
+      if (!node.getAttribute("style")) node.removeAttribute("style");
+      node.removeAttribute("data-fmt");
+      const empty = node.attributes.length === 0;
+      if (empty) {
+        const parent = node.parentNode;
+        while (parent && node.firstChild) parent.insertBefore(node.firstChild, node);
+        node.remove();
+      }
+    });
+  }
+
   function restoreCaret() {
     el.current?.focus();
     const sel = window.getSelection();
@@ -72,8 +93,22 @@ const VisualEditor = forwardRef<VisualHandle, Props>(function VisualEditor({ ini
     },
     exec: (command: string, value?: string) => {
       restoreCaret();
-      if (command === "insertTable") document.execCommand("insertHTML", false, TABLE_HTML);
-      else document.execCommand(command, false, value);
+      if (command === "insertTable") {
+        document.execCommand("insertHTML", false, TABLE_HTML);
+      } else if (command === "foreColor" || command === "hiliteColor") {
+        // styleWithCSS makes the browser write <span style="color:…"> instead of <font>. It is switched
+        // off again straight away so bold/italic keep producing <strong>/<em>.
+        document.execCommand("styleWithCSS", false, "true");
+        const ok = document.execCommand(command, false, value);
+        if (!ok && command === "hiliteColor") document.execCommand("backColor", false, value);
+        document.execCommand("styleWithCSS", false, "false");
+      } else if (command === "clearColor") {
+        clearInline("color");
+      } else if (command === "clearHighlight") {
+        clearInline("background-color");
+      } else {
+        document.execCommand(command, false, value);
+      }
       emitSoon();
     },
   }));
@@ -104,7 +139,7 @@ const VisualEditor = forwardRef<VisualHandle, Props>(function VisualEditor({ ini
     const html = e.clipboardData.getData("text/html");
     const text = e.clipboardData.getData("text/plain");
     // Clean pasted content: HTML -> Markdown -> clean HTML (kills Word/Docs junk styles).
-    const clean = html ? mdxToHtml(htmlToMdx(html)) : mdxToHtml(text);
+    const clean = html ? mdxToHtml(htmlToMdx(html, false)) : mdxToHtml(text);
     document.execCommand("insertHTML", false, clean);
     emitSoon();
   }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getCategory } from "@/lib/site";
+import { getCategory, postPath } from "@/lib/site";
 import { formatDate, type PostMeta } from "@/lib/posts";
 import { pad } from "@/lib/text";
 import Thumb from "./Thumb";
@@ -35,7 +35,7 @@ export default function PostCard({
   variant?: Variant;
   index?: number;
 }) {
-  const href = `/guides/${post.slug}`;
+  const href = postPath(post.slug);
 
   if (variant === "lead") {
     return (

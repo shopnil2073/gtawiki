@@ -3,6 +3,7 @@ import path from "node:path";
 import matter from "gray-matter";
 import GithubSlugger from "github-slugger";
 import { categories, siteConfig } from "./site";
+import { isReservedSlug } from "./text";
 
 const POSTS_DIR = path.join(process.cwd(), "content", "guides");
 
@@ -68,6 +69,9 @@ function toMedia(value: unknown): MediaItem[] {
 
 /** Parses the raw text of one .mdx file (frontmatter + body). Used for disk files and for the admin. */
 export function parseRaw(slug: string, raw: string, label = `${slug}.mdx`): Post {
+  if (isReservedSlug(slug)) {
+    throw new Error(`content/guides/${label}: the slug "${slug}" is reserved for the site. Rename the file.`);
+  }
   const { data, content } = matter(raw);
 
   for (const key of ["title", "description", "category", "date"]) {

@@ -62,6 +62,7 @@ const TEXT_ATTRS = /\b(?:q|title|tip|name|effect|subtitle|caption)="([^"]*)"/g;
 export function visibleText(body: string): string {
   return body
     .replace(/^(```|~~~)[\s\S]*?^\1.*$/gm, " ")
+    .replace(/<(?:Color|Highlight)\b[^>]*>|<\/(?:Color|Highlight)>/g, "")
     .replace(/<([A-Z][A-Za-z0-9]*)\b[^>]*?>/g, (tag) => {
       const parts: string[] = [];
       let m: RegExpExecArray | null;
@@ -120,7 +121,8 @@ export function extractImages(body: string): ImageRef[] {
   return out;
 }
 
-const INTERNAL = /(?:\]\(|href=")(?:https?:\/\/(?:www\.)?gtawiki\.xyz)?\/(?:guides|category)\/[^)"\s]*/g;
+// Internal link = markdown/HTML link to a root-level post (/some-slug), a /category/ page, or an old /guides/ URL.
+const INTERNAL = /(?:\]\(|href=")(?:https?:\/\/(?:www\.)?gtawiki\.xyz)?\/(?:category\/[^)"\s]+|guides\/[^)"\s]+|(?!admin\b|api\b|about\b|contact\b|disclaimer\b|editorial-policy\b|privacy-policy\b|terms-of-service\b)[a-z0-9][a-z0-9-]*(?=[)"#?\s]))/g;
 
 export function countInternalLinks(body: string): number {
   return (body.match(INTERNAL) ?? []).length;
@@ -266,7 +268,7 @@ export function analyze(input: SeoInput): SeoResult {
     id: "internal-links",
     label: "Internal links to other guides or categories",
     status: links >= 1 ? "pass" : "fail",
-    hint: links >= 1 ? `${links} internal link${links > 1 ? "s" : ""} found.` : "Link to at least one other /guides/ or /category/ page.",
+    hint: links >= 1 ? `${links} internal link${links > 1 ? "s" : ""} found.` : "Link to at least one other post (for example /another-post-slug) or a /category/ page.",
   });
 
   // 11. word count
@@ -290,9 +292,9 @@ export function analyze(input: SeoInput): SeoResult {
   add({
     group: "extra",
     id: "slug-length",
-    label: "URL slug is short (under 75 characters)",
-    status: input.slug.length > 0 && input.slug.length <= 75 ? "pass" : "warn",
-    hint: `${input.slug.length} characters.`,
+    label: "URL slug is short (60 characters or fewer)",
+    status: input.slug.length > 0 && input.slug.length <= 60 ? "pass" : "warn",
+    hint: `${input.slug.length} characters. Short, keyword-focused slugs (like the focus keyword itself) are easiest to read and share.`,
   });
   add({
     group: "extra",

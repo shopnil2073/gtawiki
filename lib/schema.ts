@@ -1,4 +1,4 @@
-import { siteConfig } from "./site";
+import { postPath, siteConfig } from "./site";
 import type { FaqItem, HowToStep, Post } from "./posts";
 
 export type Crumb = { name: string; href: string };
@@ -19,7 +19,7 @@ export function breadcrumbSchema(crumbs: Crumb[]) {
 }
 
 export function articleSchema(post: Post) {
-  const url = abs(`/guides/${post.slug}`);
+  const url = abs(postPath(post.slug));
   return {
     "@context": "https://schema.org",
     "@type": "Article",
