@@ -72,3 +72,7 @@ export function getCategory(slug: string) {
 
 /** Public path of a post. Posts live at the site root: https://gtawiki.xyz/<slug> */
 export const postPath = (slug: string) => `/${slug}`;
+
+/** Homepage feed: posts per page. Page 1 is "/", later pages are "/page/2", "/page/3" ... */
+export const POSTS_PER_PAGE = 10;
+export const pagePath = (n: number) => (n <= 1 ? "/" : `/page/${n}`);

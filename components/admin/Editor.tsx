@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  AlignLeft,
   ArrowLeft,
   Bold,
   Code2,
@@ -26,6 +27,7 @@ import {
   Redo2,
   Save,
   Send,
+  ChevronDown,
   Table2,
   Undo2,
   UserSquare2,
@@ -39,9 +41,11 @@ import VisualEditor, { type VisualHandle } from "./VisualEditor";
 import ComponentModal, { type ModalKind } from "./ComponentModal";
 import ImageInsertModal from "./ImageInsertModal";
 import ColorPopover, { type Swatch } from "./ColorPopover";
+import AlignMenu, { type AlignValue } from "./AlignMenu";
+import LinkPopover, { type Rect } from "./LinkPopover";
 import MediaPanel from "./MediaPanel";
 import SeoPanel from "./SeoPanel";
-import { btnCls, btnPrimaryCls, inputCls } from "./ui";
+import { btnCls, btnPrimaryCls, inputCls, toolBtnCls } from "./ui";
 
 type Props = {
   isNew: boolean;
@@ -101,6 +105,8 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
   const [textColor, setTextColor] = useState("#ff7a45");
   const [bgColor, setBgColor] = useState("#facc1540");
   const [barH, setBarH] = useState(64);
+  const [alignAnchor, setAlignAnchor] = useState<HTMLElement | null>(null);
+  const [mdxLink, setMdxLink] = useState<{ id: number; getRect: () => Rect; selected: string; s: number; e: number } | null>(null);
 
   const visualRef = useRef<VisualHandle>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -189,6 +195,8 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
   function switchMode(next: Mode) {
     if (next === mode) return;
     setColorOpen(null);
+    setAlignAnchor(null);
+    setMdxLink(null);
     if (mode === "visual") {
       setBody(currentBody());
       setMode(next);
@@ -262,6 +270,56 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
     setTextarea(body.slice(0, s) + openTag + inner + `</${tag}>` + body.slice(e), s + openTag.length, s + openTag.length + inner.length);
   }
 
+  /** MDX mode: the same floating link box as Visual mode (anchored to the toolbar button or the textarea). */
+  function openMdxLink(getRect: () => Rect) {
+    const ta = taRef.current;
+    const s = ta?.selectionStart ?? body.length;
+    const e = ta?.selectionEnd ?? s;
+    setMdxLink({ id: Date.now(), getRect, selected: body.slice(s, e), s, e });
+  }
+
+  function applyMdxLink(url: string, text: string) {
+    if (!mdxLink) return;
+    const { s, e, selected } = mdxLink;
+    const label = selected || text || "link text";
+    const md = `[${label}](${url})`;
+    setTextarea(body.slice(0, s) + md + body.slice(e), s + md.length, s + md.length);
+    setMdxLink(null);
+  }
+
+  /** MDX mode: wrap whole lines in <Align value="…">. Lists, tables, quotes, fences and HTML lines are left alone. */
+  function mdxAlign(value: AlignValue) {
+    const ta = taRef.current;
+    if (!ta) return;
+    const s = ta.selectionStart;
+    const e = ta.selectionEnd;
+    const ls = body.lastIndexOf("\n", s - 1) + 1;
+    const leIdx = body.indexOf("\n", e);
+    const le = leIdx === -1 ? body.length : leIdx;
+    const block = body
+      .slice(ls, le)
+      .split("\n")
+      .map((line) => {
+        if (!line.trim() || /^\s*([-*+]\s|\d+\.\s|>|\||```|~~~|<(?!Align\b))/.test(line)) return line;
+        const h = /^(#{1,6}\s+)(.*)$/.exec(line);
+        const prefix = h ? h[1] : "";
+        const text = (h ? h[2] : line).replace(/^<Align value="[^"]*">([\s\S]*)<\/Align>$/, "$1");
+        return value === "left" ? prefix + text : `${prefix}<Align value="${value}">${text}</Align>`;
+      })
+      .join("\n");
+    setTextarea(body.slice(0, ls) + block + body.slice(le), ls, ls + block.length);
+  }
+
+  function applyAlign(value: AlignValue) {
+    setAlignAnchor(null);
+    if (mode === "visual") {
+      const cmd = { left: "justifyLeft", center: "justifyCenter", right: "justifyRight", justify: "justifyFull" }[value];
+      visualRef.current?.exec(cmd);
+    } else {
+      mdxAlign(value);
+    }
+  }
+
   function mdxFormat(a: string) {
     const ta = taRef.current;
     if (!ta) return;
@@ -301,11 +359,6 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
         return lines((l, i) => `${i + 1}. ${strip(l)}`);
       case "quote":
         return lines((l) => `> ${strip(l)}`);
-      case "link": {
-        const url = window.prompt("Link URL (internal links look like /another-post-slug)", "/");
-        if (url) wrap("[", `](${url})`, "link text");
-        return;
-      }
       case "hr":
         return insertMdx("---");
       case "table":
@@ -344,10 +397,6 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
         return v.exec("undo");
       case "redo":
         return v.exec("redo");
-      case "link": {
-        const url = window.prompt("Link URL (internal links look like /another-post-slug)", "/");
-        if (url) v.exec("createLink", url);
-      }
     }
   }
 
@@ -424,7 +473,7 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
 
   // ------------------------------------------------------------ UI
 
-  const toolBtn = "grid h-9 w-9 shrink-0 place-items-center border border-line text-paper hover:border-sunset hover:text-sunset";
+  const toolBtn = toolBtnCls;
 
   const fmtBtn = (a: string, label: string, icon: React.ReactNode, hideInMdx = false) =>
     hideInMdx && mode === "mdx" ? null : (
@@ -598,10 +647,45 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
                 </span>
               </button>
 
+              <button
+                type="button"
+                title="Text alignment"
+                aria-label="Text alignment"
+                aria-haspopup="menu"
+                aria-expanded={alignAnchor !== null}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  const anchor = e.currentTarget;
+                  setAlignAnchor((cur) => (cur ? null : anchor));
+                }}
+                className={`${toolBtn} !w-auto gap-0.5 px-2 ${alignAnchor ? "!border-sunset" : ""}`}
+              >
+                <AlignLeft className="h-4 w-4" />
+                <ChevronDown className="h-3 w-3 text-mute" />
+              </button>
               {fmtBtn("ul", "Bullet list", <List className="h-4 w-4" />)}
               {fmtBtn("ol", "Numbered list", <ListOrdered className="h-4 w-4" />)}
               {fmtBtn("quote", "Blockquote", <Quote className="h-4 w-4" />)}
-              {fmtBtn("link", "Link", <Link2 className="h-4 w-4" />)}
+              <button
+                type="button"
+                title="Link (Ctrl+K)"
+                aria-label="Link"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  if (mode === "visual") {
+                    visualRef.current?.openLinkEditor();
+                  } else {
+                    const b = e.currentTarget;
+                    openMdxLink(() => {
+                      const r = b.getBoundingClientRect();
+                      return { top: r.top, left: r.left, bottom: r.bottom, right: r.right };
+                    });
+                  }
+                }}
+                className={toolBtn}
+              >
+                <Link2 className="h-4 w-4" />
+              </button>
               {fmtBtn("table", "Table", <Table2 className="h-4 w-4" />)}
               {fmtBtn("hr", "Divider", <Minus className="h-4 w-4" />)}
               {fmtBtn("undo", "Undo", <Undo2 className="h-4 w-4" />, true)}
@@ -631,6 +715,15 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   onKeyDown={(e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+                      e.preventDefault();
+                      const ta = e.currentTarget;
+                      openMdxLink(() => {
+                        const r = ta.getBoundingClientRect();
+                        return { top: r.top + 24, left: r.left + 24, bottom: r.top + 48, right: r.left + 24 };
+                      });
+                      return;
+                    }
                     if (e.key === "Tab") {
                       e.preventDefault();
                       const ta = e.currentTarget;
@@ -687,6 +780,17 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
               <label className="mono-label mb-1.5 block text-mute" htmlFor="auth">Author name</label>
               <input id="auth" value={fields.author} onChange={(e) => setField("author", e.target.value)} placeholder="Defaults to GTA Wiki Editorial Team" className={inputCls} />
             </div>
+            <div className="space-y-2.5 sm:col-span-2">
+              <p className="mono-label text-mute">Homepage</p>
+              <label className="flex items-center gap-2 text-sm text-paper">
+                <input type="checkbox" checked={fields.featured} onChange={(e) => setField("featured", e.target.checked)} className="h-4 w-4 accent-[#ff7a45]" />
+                Featured post: show as the big hero at the top of the homepage (newest featured post wins)
+              </label>
+              <label className="flex items-center gap-2 text-sm text-paper">
+                <input type="checkbox" checked={fields.popular} onChange={(e) => setField("popular", e.target.checked)} className="h-4 w-4 accent-[#ff7a45]" />
+                Popular post: list under “Popular posts” on the homepage
+              </label>
+            </div>
           </div>
         </main>
 
@@ -708,6 +812,21 @@ export default function Editor({ isNew, initialSlug, initialFields, initialBody,
           />
         </aside>
       </div>
+
+      {alignAnchor && <AlignMenu anchor={alignAnchor} onPick={applyAlign} onClose={() => setAlignAnchor(null)} />}
+
+      {mdxLink && (
+        <LinkPopover
+          key={mdxLink.id}
+          getRect={mdxLink.getRect}
+          mode="new"
+          initialUrl=""
+          initialText=""
+          needText={mdxLink.selected === ""}
+          onApply={applyMdxLink}
+          onClose={() => setMdxLink(null)}
+        />
+      )}
 
       {colorOpen && (
         <ColorPopover

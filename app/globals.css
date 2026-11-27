@@ -360,3 +360,8 @@ a:hover > .link-rule,
 .wiki-prose mark {
   color: inherit;
 }
+
+/* Links inside the visual editor behave like buttons (click = edit link) */
+.visual-surface a {
+  cursor: pointer;
+}

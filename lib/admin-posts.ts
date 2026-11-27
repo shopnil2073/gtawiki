@@ -74,6 +74,9 @@ export function postToFields(p: Post): PostFields {
     image: p.image ?? "",
     imageAlt: p.imageAlt ?? "",
     draft: p.draft,
+    featured: p.featured,
+    popular: p.popular,
+    views: p.views,
     media: p.media,
   };
 }
@@ -94,6 +97,8 @@ export function emptyFields(): PostFields {
     image: "",
     imageAlt: "",
     draft: true,
+    featured: false,
+    popular: false,
     media: [],
   };
 }

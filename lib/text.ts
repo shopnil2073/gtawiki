@@ -25,7 +25,7 @@ export function pad(n: number, size = 2): string {
  */
 export const RESERVED_SLUGS = new Set([
   "about", "contact", "disclaimer", "editorial-policy", "privacy-policy", "terms-of-service",
-  "admin", "api", "category", "categories", "guides", "tag", "tags", "author", "authors",
+  "admin", "api", "category", "categories", "guides", "page", "pages", "tag", "tags", "author", "authors",
   "sitemap", "robots", "favicon", "icon", "apple-icon", "opengraph-image", "twitter-image", "manifest",
   "feed", "rss", "search", "login", "logout", "register", "wp-admin", "wp-login", "wp-content", "wp-json",
   "static", "assets", "images", "public", "index", "home", "404", "500", "not-found", "_next",

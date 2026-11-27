@@ -14,6 +14,12 @@ export type PostFields = {
   image: string;
   imageAlt: string;
   draft: boolean;
+  /** Homepage hero. */
+  featured: boolean;
+  /** Listed under "Popular posts". */
+  popular: boolean;
+  /** Optional manual view count (kept as-is). */
+  views?: number;
   media: MediaItem[];
 };
 
@@ -35,6 +41,9 @@ export function serializePost(fields: PostFields, body: string): string {
   if (fields.image) lines.push(`image: ${q(fields.image)}`);
   if (fields.imageAlt) lines.push(`imageAlt: ${q(fields.imageAlt)}`);
   lines.push(`draft: ${fields.draft ? "true" : "false"}`);
+  if (fields.featured) lines.push("featured: true");
+  if (fields.popular) lines.push("popular: true");
+  if (typeof fields.views === "number") lines.push(`views: ${fields.views}`);
   if (fields.media.length) {
     lines.push("media:");
     for (const m of fields.media) {

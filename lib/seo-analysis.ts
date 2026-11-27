@@ -62,7 +62,7 @@ const TEXT_ATTRS = /\b(?:q|title|tip|name|effect|subtitle|caption)="([^"]*)"/g;
 export function visibleText(body: string): string {
   return body
     .replace(/^(```|~~~)[\s\S]*?^\1.*$/gm, " ")
-    .replace(/<(?:Color|Highlight)\b[^>]*>|<\/(?:Color|Highlight)>/g, "")
+    .replace(/<(?:Color|Highlight|Align)\b[^>]*>|<\/(?:Color|Highlight|Align)>/g, "")
     .replace(/<([A-Z][A-Za-z0-9]*)\b[^>]*?>/g, (tag) => {
       const parts: string[] = [];
       let m: RegExpExecArray | null;
@@ -94,7 +94,7 @@ export function extractHeadings(body: string): Heading[] {
     if (inFence) continue;
     const m = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
     if (m) {
-      out.push({ level: m[1].length, text: m[2].replace(/[*_`]/g, "") });
+      out.push({ level: m[1].length, text: m[2].replace(/<[^>]+>/g, "").replace(/[*_`]/g, "") });
       continue;
     }
     const h = /^\s*<h([1-6])[^>]*>([\s\S]*?)<\/h\1>\s*$/i.exec(line);

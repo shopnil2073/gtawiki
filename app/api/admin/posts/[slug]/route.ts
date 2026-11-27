@@ -60,6 +60,9 @@ function clean(fields: PostFields): PostFields {
     image: str(fields.image),
     imageAlt: str(fields.imageAlt),
     draft: Boolean(fields.draft),
+    featured: fields.featured === true,
+    popular: fields.popular === true,
+    views: typeof fields.views === "number" && Number.isFinite(fields.views) ? fields.views : undefined,
     media,
   };
 }

@@ -72,7 +72,7 @@ function scanTagEnd(src: string, start: number): { end: number; selfClosing: boo
 }
 
 /** Inline wiki components: they live inside paragraphs, so they are never treated as standalone blocks. */
-export const INLINE_COMPONENTS = new Set(["Color", "Highlight"]);
+export const INLINE_COMPONENTS = new Set(["Color", "Highlight", "Align"]);
 
 /** Splits MDX into markdown text and wiki component blocks (only blocks that start at a line start). */
 export function splitMdx(src: string): Segment[] {

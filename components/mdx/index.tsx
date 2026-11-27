@@ -6,7 +6,7 @@ import QaBlock from "./QaBlock";
 import CheatCodeCard from "./CheatCodeCard";
 import AdSlot from "./AdSlot";
 import Figure from "./Figure";
-import { Color, Highlight } from "./InlineStyle";
+import { Align, Color, Highlight } from "./InlineStyle";
 
 function A({ href = "", children, ...rest }: ComponentPropsWithoutRef<"a">) {
   if (href.startsWith("/") || href.startsWith("#")) {
@@ -38,4 +38,5 @@ export const mdxComponents = {
   Figure,
   Color,
   Highlight,
+  Align,
 };

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import GithubSlugger from "github-slugger";
-import { categories, siteConfig } from "./site";
+import { categories, POSTS_PER_PAGE, siteConfig } from "./site";
 import { isReservedSlug } from "./text";
 
 const POSTS_DIR = path.join(process.cwd(), "content", "guides");
@@ -28,6 +28,12 @@ export type PostMeta = {
   keyword: string;
   type: PostType;
   draft: boolean;
+  /** Show as the big hero on the homepage (newest flagged post wins). */
+  featured: boolean;
+  /** Optional: appears in "Popular posts". */
+  popular: boolean;
+  /** Optional view count (set by hand or a script). When present, Popular posts sorts by it. */
+  views?: number;
   words: number;
   readingMinutes: number;
 };
@@ -97,11 +103,15 @@ export function parseRaw(slug: string, raw: string, label = `${slug}.mdx`): Post
     date,
     updated: toDate(data.updated, date),
     author: data.author ? String(data.author) : siteConfig.defaultAuthor,
-    image: data.image ? String(data.image) : undefined,
+    // `cover` is accepted as an alias of `image`
+    image: data.image ? String(data.image) : data.cover ? String(data.cover) : undefined,
     imageAlt: data.imageAlt ? String(data.imageAlt) : undefined,
     keyword: data.keyword ? String(data.keyword) : "",
     type: (data.type as PostType) ?? "article",
     draft: Boolean(data.draft),
+    featured: data.featured === true,
+    popular: data.popular === true,
+    views: typeof data.views === "number" && Number.isFinite(data.views) ? data.views : undefined,
     words,
     readingMinutes: Math.max(1, Math.ceil(words / 220)),
     content,
@@ -209,4 +219,50 @@ export function getCategoryCounts(): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const p of getAllPosts()) counts[p.category] = (counts[p.category] ?? 0) + 1;
   return counts;
+}
+
+// ------------------------------------------------------------------ homepage helpers
+
+/** Featured hero: newest post with `featured: true`, otherwise simply the newest post. */
+export function pickFeatured(posts: Post[]): Post | undefined {
+  return posts.find((p) => p.featured) ?? posts[0];
+}
+
+/**
+ * Popular posts, always up to `count` cards:
+ * most `views` first, then `popular: true`, then `featured: true`, then newest.
+ */
+export function pickPopular(posts: Post[], count = 3): Post[] {
+  return [...posts]
+    .sort(
+      (a, b) =>
+        (b.views ?? -1) - (a.views ?? -1) ||
+        Number(b.popular) - Number(a.popular) ||
+        Number(b.featured) - Number(a.featured) ||
+        (a.date < b.date ? 1 : a.date > b.date ? -1 : 0),
+    )
+    .slice(0, count);
+}
+
+export function getTotalFeedPages(): number {
+  const all = getAllPosts();
+  const feedCount = Math.max(0, all.length - (pickFeatured(all) ? 1 : 0));
+  return Math.max(1, Math.ceil(feedCount / POSTS_PER_PAGE));
+}
+
+/** Everything the homepage needs for one page of the feed. The featured post is never repeated in the feed. */
+export function getHomeData(page: number) {
+  const all = getAllPosts();
+  const featured = pickFeatured(all);
+  const feed = all.filter((p) => p !== featured);
+  const totalPages = Math.max(1, Math.ceil(feed.length / POSTS_PER_PAGE));
+  const current = Math.min(Math.max(1, page), totalPages);
+  return {
+    featured,
+    items: feed.slice((current - 1) * POSTS_PER_PAGE, current * POSTS_PER_PAGE),
+    page: current,
+    totalPages,
+    popular: pickPopular(all, 3),
+    total: all.length,
+  };
 }

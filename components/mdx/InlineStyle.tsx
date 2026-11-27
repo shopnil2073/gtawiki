@@ -25,3 +25,14 @@ export function Highlight({ value, children }: { value?: string; children?: Reac
     </mark>
   );
 }
+
+const ALIGN = new Set(["left", "center", "right", "justify"]);
+
+/**
+ * <Align value="center">text</Align>: aligns the paragraph or heading it sits in.
+ * Rendered as a block-level <span> so it stays valid HTML inside <p> and <h2>.
+ */
+export function Align({ value, children }: { value?: string; children?: ReactNode }) {
+  const textAlign = value && ALIGN.has(value) ? (value as "left" | "center" | "right" | "justify") : undefined;
+  return <span style={{ display: "block", textAlign }}>{children}</span>;
+}

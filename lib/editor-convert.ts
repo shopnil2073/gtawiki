@@ -15,8 +15,23 @@ function inlineToHtml(text: string): string {
     .replace(/<\/(?:Color|Highlight)>/g, "</span>");
 }
 
+/**
+ * <Align value="center">text</Align> on its own line (optionally after "## ") becomes a real
+ * <p> / <h2> with text-align. Used by Visual mode and the live preview.
+ */
+function alignToHtml(text: string): string {
+  return text.replace(
+    /^(#{1,6})?[ \t]*<Align value="(left|center|right|justify)">([\s\S]*?)<\/Align>[ \t]*$/gm,
+    (_m, hashes: string | undefined, value: string, inner: string) => {
+      const tag = hashes ? `h${hashes.length}` : "p";
+      const body = marked.parseInline(inlineToHtml(inner), { async: false, gfm: true }) as string;
+      return `\n<${tag} style="text-align:${value}">${body}</${tag}>\n`;
+    },
+  );
+}
+
 function md(text: string): string {
-  return marked.parse(inlineToHtml(text), { async: false, gfm: true }) as string;
+  return marked.parse(inlineToHtml(alignToHtml(text)), { async: false, gfm: true }) as string;
 }
 
 /** rgb()/rgba()/#hex (as browsers serialize them) -> #rrggbb or #rrggbbaa. Returns null if unknown. */
@@ -88,6 +103,25 @@ function turndown(): TurndownService {
       return `\n\n${raw}\n\n`;
     },
   });
+  // Aligned paragraphs / headings: <p style="text-align:center"> -> <Align value="center">…</Align>
+  const alignOf = (node: Node): string | null => {
+    const el = node as HTMLElement;
+    const style = el.getAttribute("style") ?? "";
+    const v = (styleValue(style, "text-align") ?? el.getAttribute("align") ?? "").toLowerCase();
+    return v === "center" || v === "right" || v === "justify" ? v : null;
+  };
+  td.addRule("alignedBlock", {
+    filter: (node) => keepInlineFormats && /^(P|DIV|H[1-6])$/.test(node.nodeName) && alignOf(node) !== null,
+    replacement: (content, node) => {
+      const text = content.replace(/\n{2,}/g, "\n").trim();
+      if (!text) return "";
+      const value = alignOf(node);
+      const m = /^H([1-6])$/.exec(node.nodeName);
+      const prefix = m ? `${"#".repeat(Number(m[1]))} ` : "";
+      return `\n\n${prefix}<Align value="${value}">${text}</Align>\n\n`;
+    },
+  });
+
   // Text color / highlight: browser spans (or <font>) -> <Color> / <Highlight> components
   td.addRule("inlineColor", {
     filter: (node) => {
@@ -119,6 +153,7 @@ export function htmlToMdx(html: string, keepFormats = true): string {
   keepInlineFormats = keepFormats;
   return turndown()
     .turndown(html)
+    .replace(/\u00a0/g, " ")
     .replace(/^[ \t]+$/gm, "")
     .replace(/^(\s*)-\s{2,}/gm, "$1- ")
     .replace(/^(\s*\d+\.)\s{2,}/gm, "$1 ")
@@ -132,7 +167,7 @@ export function visualRisks(body: string): string[] {
   for (const s of splitMdx(body)) {
     if (s.type !== "md") continue;
     const t = s.text.replace(/^(```|~~~)[\s\S]*?^\1.*$/gm, "");
-    if (/<(?!Color\b|Highlight\b)[A-Z][A-Za-z0-9]*[\s/>]/.test(t)) risks.push("a wiki component placed inside a paragraph");
+    if (/<(?!Color\b|Highlight\b|Align\b)[A-Z][A-Za-z0-9]*[\s/>]/.test(t)) risks.push("a wiki component placed inside a paragraph");
     if (/<(?!br\b)[a-z][a-z0-9]*[\s/>]/.test(t)) risks.push("raw HTML tags");
     if (/(^|[^\\])\{[^}]*\}/.test(t)) risks.push("a { } expression outside a component");
   }
